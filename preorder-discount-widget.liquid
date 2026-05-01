@@ -1,0 +1,705 @@
+{% comment %} ── Asset loading ─────────────────────────────────
+  stylesheet_tag and script_tag deduplicate automatically in
+  Horizon — safe to render this snippet multiple times.
+{% endcomment %}
+{% comment %}
+  =============================================================
+    Preorder Discount Widget
+    Compatible with: Shopify Horizon theme
+    Depends on: Essential Preorder & Back In Stock app
+    Authored: snippets/preorder-discount-widget.liquid
+  =============================================================
+{% endcomment %}
+
+{% assign pw_discount_format = 'percent' %}
+
+<style>
+  /* ── WIDGET WRAPPER ──────────────────────────────────────── */
+  .preorder-widget {
+    --pw-font: inherit;
+    display: none;
+    align-items: stretch;
+    gap: 10px;
+    margin: 20px 0;
+    font-family: var(--pw-font);
+    /*
+      contain: layout style
+      ─────────────────────
+      OPTIMIZATION: Tells the browser this element's layout and
+      styles are self-contained. Any reflow or repaint triggered
+      by JS updates (text changes, display toggles) is isolated
+      to this widget — it cannot affect ancestor or sibling
+      layout, saving a full-document reflow on every hydration.
+    */
+    contain: layout style;
+  }
+  .preorder-widget[data-widget-state="ready"] {
+    display: flex;
+  }
+
+  /* ── CARD BASE ───────────────────────────────────────────── */
+  .preorder-widget__card {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    min-height: 120px;
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 36px 12px 12px;
+    gap: 8px;
+    box-sizing: border-box;
+  }
+  .preorder-widget__card-body {
+    justify-content: center;
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+  }
+
+  /* ── BADGE ───────────────────────────────────────────────── */
+  .preorder-widget__badge {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    padding: 4px 10px;
+    font-family: var(--pw-font);
+    font-weight: 500;
+    font-size: 12px;
+    line-height: 16px;
+    letter-spacing: 0;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ── PRICE ───────────────────────────────────────────────── */
+  .preorder-widget__price {
+    font-family: var(--pw-font);
+    font-weight: 700;
+    font-size: 36px;
+    line-height: 48px;
+    letter-spacing: -0.54px;
+    margin: 0;
+    white-space: nowrap;
+    text-align: center;
+    width: 100%;
+  }
+
+  /* ── LABEL ───────────────────────────────────────────────── */
+  .preorder-widget__label {
+    font-family: var(--pw-font);
+    font-weight: 500;
+    font-size: 14px;
+    line-height: 16px;
+    letter-spacing: 0;
+    color: #303030;
+    text-transform: uppercase;
+    margin: 0;
+  }
+
+  /* ── ACTIVE CARD ─────────────────────────────────────────── */
+  .preorder-widget__card--active {
+    border: 2px solid #111111;
+    background: #ffffff;
+  }
+  .preorder-widget__card--active .preorder-widget__badge {
+    background: #CC1111;
+    color: #ffffff;
+  }
+  .preorder-widget__card--active .preorder-widget__price {
+    color: #111111;
+  }
+  .preorder-widget__card--active .preorder-widget__label {
+    color: #303030;
+  }
+
+  /* ── FUTURE CARD ─────────────────────────────────────────── */
+  .preorder-widget__card--future {
+    border: 1px solid #E0E0E0;
+    background: #F5F5F5;
+  }
+  .preorder-widget__card--future .preorder-widget__badge {
+    background: #CFCFCF;
+    color: #555555;
+  }
+  .preorder-widget__card--future .preorder-widget__price {
+    color: #AAAAAA;
+    text-decoration: line-through;
+    text-decoration-color: #AAAAAA;
+    text-decoration-thickness: 2px;
+  }
+  .preorder-widget__card--future .preorder-widget__label {
+    color: #666666;
+  }
+
+  /* ── SEPARATOR ───────────────────────────────────────────── */
+  .preorder-widget__separator {
+    flex: 0 0 auto;
+    align-self: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-top: 12px;
+  }
+  .preorder-widget__separator-icon {
+    display: block;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+
+  /* ── SHIP MESSAGE ────────────────────────────────────────── */
+  .preorder-widget__message {
+    font-family: var(--pw-font);
+    font-size: 11px;
+    color: #666;
+    text-align: center;
+    margin: 0;
+    line-height: 1.4;
+  }
+  .preorder-widget__message:empty {
+    display: none;
+  }
+
+  /* ══════════════════════════════════════════════════════════
+     RESPONSIVE
+     Strategy: row layout preserved at ALL breakpoints.
+     Mobile adjusts sizing, spacing, and font scale only.
+     Cards never stack — they shrink proportionally.
+  ══════════════════════════════════════════════════════════ */
+
+  /* Tablet */
+  @media (max-width: 600px) {
+    .preorder-widget {
+      gap: 8px;
+    }
+    .preorder-widget__price {
+      font-size: clamp(20px, 5.5vw, 36px);
+      line-height: 1.2;
+      letter-spacing: -0.3px;
+    }
+    .preorder-widget__label {
+      font-size: 12px;
+    }
+    .preorder-widget__badge {
+      font-size: 11px;
+    }
+  }
+
+  /* Mobile: row maintained — cards shrink, padding tightens */
+  @media (max-width: 480px) {
+    .preorder-widget[data-widget-state="ready"] {
+      gap: 6px;
+      margin: 14px 0;
+    }
+    .preorder-widget__card {
+      min-height: 100px;
+      padding: 30px 8px 10px;
+      gap: 4px;
+    }
+    .preorder-widget__badge {
+      font-size: 10px;
+      padding: 4px 6px;
+    }
+    .preorder-widget__price {
+      font-size: clamp(18px, 5vw, 28px);
+      line-height: 1.15;
+      letter-spacing: -0.2px;
+    }
+    .preorder-widget__label {
+      font-size: 10px;
+      letter-spacing: 0.06em;
+    }
+    .preorder-widget__message {
+      font-size: 10px;
+    }
+    .preorder-widget__separator {
+      padding-top: 10px;
+      flex: 0 0 auto;
+    }
+    .preorder-widget__separator-icon {
+      width: 12px;
+      height: 12px;
+    }
+  }
+
+  /* Very small screens */
+  @media (max-width: 360px) {
+    .preorder-widget__price {
+      font-size: clamp(15px, 4.5vw, 20px);
+    }
+    .preorder-widget__badge {
+      font-size: 9px;
+      padding: 3px 4px;
+    }
+    .preorder-widget__label {
+      font-size: 9px;
+    }
+    .preorder-widget__card {
+      padding: 28px 6px 8px;
+    }
+  }
+</style>
+
+<div
+  class="preorder-widget"
+  data-widget-state="loading"
+  data-discount-format="{{ pw_discount_format }}"
+  aria-label="Preorder pricing"
+>
+  <!-- LEFT: Early Bird / Active Preorder -->
+  <div class="preorder-widget__card preorder-widget__card--active">
+    <div class="preorder-widget__badge" data-widget-slot="discount-badge">
+      Early Bird Deal
+    </div>
+    <div class="preorder-widget__card-body">
+      <div class="preorder-widget__price" data-widget-slot="preorder-price"></div>
+      <div class="preorder-widget__label">EARLY BIRD</div>
+    </div>
+  </div>
+
+  <!-- SEPARATOR -->
+  <div class="preorder-widget__separator" aria-hidden="true">
+    <svg
+      class="preorder-widget__separator-icon"
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M6 3.5L10.5 8L6 12.5"
+        stroke="#AAAAAA"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+  </div>
+
+  <!-- RIGHT: Launch / Compare price -->
+  <div class="preorder-widget__card preorder-widget__card--future">
+    <div class="preorder-widget__badge" data-widget-slot="launch-label">
+      Regular Price
+    </div>
+    <div class="preorder-widget__card-body">
+      <div class="preorder-widget__price" data-widget-slot="compare-price"></div>
+      <div class="preorder-widget__label">LAUNCH PRICE</div>
+    </div>
+  </div>
+</div>
+
+<script>
+/*
+  OPTIMIZATION: Single-execution guard.
+  ─────────────────────────────────────
+  If this snippet is ever rendered more than once on the same
+  page (e.g. quick-buy drawer + product page simultaneously),
+  two script instances would fight each other over the same DOM
+  elements — double-firing observers, double-hydrating slots.
+  This flag ensures the module body runs exactly once per page,
+  regardless of how many times the snippet is rendered.
+*/
+if (!window.__pwInitialised) {
+  window.__pwInitialised = true;
+
+(function () {
+  'use strict';
+
+  var CONFIG = {
+    paymentContainer:  '.shopify-payment-button, [data-shopify="payment-button"]',
+    inactiveClass:     'essential-preorder-containers-inactive',
+    activeClass:       'essential-preorder-container-active',
+    pricesBlock:       '[data-essential-preorder-element="prices-block"]',
+    regularPrice:      '[data-essential-preorder-element="regular"]',
+    comparePrice:      '[data-essential-preorder-element="compare-at"]',
+    messageEl:         '[data-essential-preorder-element="message"]',
+    appFontEl:         '.essential-preorder-initial-add-to-cart-text',
+    widget:            '.preorder-widget',
+    slotPrice:         '[data-widget-slot="preorder-price"]',
+    slotCompare:       '[data-widget-slot="compare-price"]',
+    slotMessage:       '[data-widget-slot="ship-message"]',
+    slotBadge:         '[data-widget-slot="discount-badge"]',
+    cardFuture:        '.preorder-widget__card--future',
+    separator:         '.preorder-widget__separator',
+    /*
+      OPTIMIZATION: Debounce delay (ms).
+      ────────────────────────────────────
+      MutationObserver callbacks batch DOM mutations but still
+      fire multiple times per variant switch (class changes,
+      child insertions, text updates all fire separately).
+      An 80 ms debounce collapses a burst of 10-20 rapid
+      callbacks into a single evaluateVariant() or
+      hydrateWidget() call, eliminating redundant querySelector
+      chains and layout reads during the burst window.
+    */
+    debounceMs: 80
+  };
+
+  /*
+    OPTIMIZATION: Cached DOM references.
+    ─────────────────────────────────────
+    The original code re-ran document.querySelector() inside
+    every function on every invocation — including inside
+    MutationObserver callbacks that fire repeatedly.
+    These elements are stable after DOMContentLoaded: queried
+    once here, referenced by variable everywhere else.
+
+    Exception: regularPrice, comparePrice, messageEl are
+    intentionally NOT cached — the app replaces these nodes
+    entirely on variant change, so a stale reference would
+    point at a detached element. They remain live-queried
+    only inside hydrateWidget() where freshness is required.
+  */
+  var cache = {
+    widget:      null,
+    slotPrice:   null,
+    slotCompare: null,
+    slotMessage: null,
+    slotBadge:   null,
+    cardFuture:  null,
+    separator:   null,
+    payment:     null   /* also cached — class-watched, node is stable */
+  };
+
+  function buildCache() {
+    cache.widget      = document.querySelector(CONFIG.widget);
+    cache.slotPrice   = document.querySelector(CONFIG.slotPrice);
+    cache.slotCompare = document.querySelector(CONFIG.slotCompare);
+    cache.slotMessage = document.querySelector(CONFIG.slotMessage);
+    cache.slotBadge   = document.querySelector(CONFIG.slotBadge);
+    cache.cardFuture  = document.querySelector(CONFIG.cardFuture);
+    cache.separator   = document.querySelector(CONFIG.separator);
+    cache.payment     = document.querySelector(CONFIG.paymentContainer);
+  }
+
+  /*
+    OPTIMIZATION: Stored observer references.
+    ──────────────────────────────────────────
+    The original code created MutationObservers with `new`
+    but never stored the payment/prices observer references,
+    making them impossible to disconnect. Over time (AJAX
+    navigation, section reloads) this leaks observers that
+    continue firing against stale or removed DOM nodes.
+    All three are now stored and can be torn down cleanly.
+  */
+  var observers = {
+    payment:  null,
+    prices:   null,
+    fallback: null
+  };
+
+  /*
+    OPTIMIZATION: Debounce utility.
+    ────────────────────────────────
+    Delays fn execution until debounceMs have elapsed since
+    the last call. Applied to all observer callbacks so a
+    burst of mutations produces exactly one work unit.
+  */
+  function debounce(fn, ms) {
+    var timer;
+    return function () {
+      clearTimeout(timer);
+      timer = setTimeout(fn, ms);
+    };
+  }
+
+  /* ── Unchanged logic helpers ─────────────────────────────── */
+
+  function parsePrice(text) {
+    var cleaned = (text || '').replace(/[^0-9.,]/g, '').replace(',', '.');
+    return parseFloat(cleaned) || 0;
+  }
+
+  function extractSymbol(text) {
+    return (text || '').replace(/[\d.,\s]/g, '').trim();
+  }
+
+  function readText(selector) {
+    var el = document.querySelector(selector);
+    return el ? (el.textContent || '').trim() : '';
+  }
+
+  /* setText now uses cached elements by key instead of a fresh querySelector */
+  function setText(cacheKey, value) {
+    var el = cache[cacheKey];
+    if (el) el.textContent = value || '';
+  }
+
+  function isPreorderVariant() {
+    /*
+      Uses cache.payment (stable node) for the class check.
+      Falls back to live querySelector for activeClass — that
+      element is app-injected and may not exist at cache-build
+      time on slower connections, so live query is safer here.
+    */
+    if (cache.payment && cache.payment.classList.contains(CONFIG.inactiveClass)) {
+      return false;
+    }
+    return !!document.querySelector('.' + CONFIG.activeClass);
+  }
+
+  /*
+    hasDiscount()
+    ─────────────
+    Returns true only when the app has injected a compare-at
+    price that is numerically higher than the preorder price.
+
+    WHY live queries here (not cache):
+    These elements are replaced by the app on every variant
+    switch — a cached reference would point at a detached node.
+    This function is called inside evaluateVariant() which is
+    already debounced, so the querySelector cost is paid at
+    most once per 80ms burst, not on every mutation.
+
+    CASES where this returns false → widget stays hidden:
+      • No compare-at element in the DOM (app didn't inject one)
+      • Compare-at element exists but is empty / unparseable
+      • Compare-at price ≤ preorder price (no real discount)
+      • Preorder price element missing entirely
+  */
+  function hasDiscount() {
+    var regularEl  = document.querySelector(CONFIG.regularPrice);
+    var compareEl  = document.querySelector(CONFIG.comparePrice);
+
+    /* Both elements must exist and have content */
+    if (!regularEl || !compareEl) return false;
+
+    var regularText = (regularEl.textContent  || '').trim();
+    var compareText = (compareEl.textContent || '').trim();
+
+    if (!regularText || !compareText) return false;
+
+    var regularNum = parsePrice(regularText);
+    var compareNum = parsePrice(compareText);
+
+    /* A valid discount requires compare > regular, both > 0 */
+    return compareNum > 0 && regularNum > 0 && compareNum > regularNum;
+  }
+
+  function detectFont() {
+    if (!cache.widget) return;
+    var appTextEl = document.querySelector(CONFIG.appFontEl);
+    if (appTextEl) {
+      var appFont = window.getComputedStyle(appTextEl).fontFamily;
+      if (appFont && appFont !== '' && appFont !== 'inherit') {
+        cache.widget.style.setProperty('--pw-font', appFont);
+        return;
+      }
+    }
+    var bodyFont = window.getComputedStyle(document.body).fontFamily;
+    if (bodyFont && bodyFont !== '') {
+      cache.widget.style.setProperty('--pw-font', bodyFont);
+    }
+  }
+
+  function resetRightCard() {
+    if (cache.cardFuture) cache.cardFuture.style.display = '';
+    if (cache.separator)  cache.separator.style.display  = '';
+  }
+
+  function hydrateBadge(regularNum, compareNum, compareText) {
+    if (!cache.slotBadge) return;
+    var discountFormat = (cache.widget && cache.widget.getAttribute('data-discount-format')) || 'percent';
+    if (compareNum > 0 && compareNum > regularNum) {
+      var amountOff = compareNum - regularNum;
+      var symbol    = extractSymbol(compareText);
+      var pct       = Math.round(amountOff / compareNum * 100);
+      var amountStr = symbol + (amountOff % 1 === 0
+        ? amountOff.toFixed(0)
+        : amountOff.toFixed(2));
+      cache.slotBadge.textContent = discountFormat === 'amount'
+        ? 'Save ' + amountStr
+        : 'Save ' + pct + '%';
+      if (window.location.hostname === 'localhost' ||
+          window.location.search.indexOf('preview_theme_id') > -1) {
+        console.log(
+          '[PreorderWidget] Discount debug' +
+          ' | format: "' + discountFormat + '"' +
+          ' | percent: Save ' + pct + '%' +
+          ' | amount: Save ' + amountStr
+        );
+      }
+    } else {
+      cache.slotBadge.textContent = 'Early Bird Deal';
+    }
+  }
+
+  function hydrateWidget() {
+    /*
+      regularPrice / comparePrice / messageEl are live-queried
+      intentionally — the app replaces these nodes on variant
+      change so cached references become detached and stale.
+    */
+    var regularEl   = document.querySelector(CONFIG.regularPrice);
+    var compareAtEl = document.querySelector(CONFIG.comparePrice);
+    if (!regularEl) return;
+
+    var regularText = (regularEl.textContent || '').trim();
+    var compareText = (compareAtEl ? compareAtEl.textContent : '').trim();
+    var regularNum  = parsePrice(regularText);
+    var compareNum  = parsePrice(compareText);
+
+    setText('slotPrice', regularText || '—');
+    hydrateBadge(regularNum, compareNum, compareText);
+
+    if (compareText && compareNum > regularNum) {
+      setText('slotCompare', compareText);
+    } else {
+      if (cache.cardFuture) cache.cardFuture.style.display = 'none';
+      if (cache.separator)  cache.separator.style.display  = 'none';
+    }
+
+    setText('slotMessage', readText(CONFIG.messageEl));
+  }
+
+  function showWidget() {
+    if (!cache.widget) return;
+    detectFont();
+    resetRightCard();
+    hydrateWidget();
+    cache.widget.setAttribute('data-widget-state', 'ready');
+  }
+
+  function hideWidget() {
+    if (!cache.widget) return;
+    cache.widget.setAttribute('data-widget-state', 'loading');
+  }
+
+  function evaluateVariant() {
+    /*
+      Both conditions must pass for the widget to appear:
+        1. isPreorderVariant() — essential-preorder-container-active
+           exists, is visible, and payment button is not inactive.
+        2. hasDiscount()       — a compare-at price exists in the
+           app DOM and is numerically higher than the preorder price.
+
+      If either fails the widget hides. This covers:
+        • Preorder active but no discount set on the product
+        • Preorder active but compare-at = regular (0% discount)
+        • Preorder active but compare-at element missing entirely
+        • Non-preorder variant selected on a multi-variant product
+    */
+    if (isPreorderVariant() && hasDiscount()) {
+      showWidget();
+    } else {
+      hideWidget();
+    }
+  }
+
+  /*
+    OPTIMIZATION: Debounced observer callbacks.
+    ────────────────────────────────────────────
+    Both callbacks are wrapped in debounce() so rapid-fire
+    mutation bursts collapse into a single deferred execution.
+    The 80 ms window is long enough to absorb a full variant-
+    switch mutation burst without being perceptible to the user.
+  */
+  var debouncedEvaluate = debounce(evaluateVariant, CONFIG.debounceMs);
+
+  var debouncedHydrate = debounce(function () {
+    if (cache.widget && cache.widget.getAttribute('data-widget-state') === 'ready') {
+      resetRightCard();
+      hydrateWidget();
+    }
+  }, CONFIG.debounceMs);
+
+  function watchForVariantChanges() {
+    var pricesBlock = document.querySelector(CONFIG.pricesBlock);
+
+    if (cache.payment) {
+      /*
+        OPTIMIZATION: Store the observer reference.
+        The original used `new MutationObserver(...)` inline
+        without storing it — making the observer permanently
+        undisposable. Stored in `observers.payment` so it can
+        be disconnected on teardown if needed.
+      */
+      observers.payment = new MutationObserver(debouncedEvaluate);
+      observers.payment.observe(cache.payment, {
+        attributes:      true,
+        attributeFilter: ['class']
+      });
+    }
+
+    if (pricesBlock) {
+      observers.prices = new MutationObserver(debouncedHydrate);
+      observers.prices.observe(pricesBlock, {
+        childList:     true,
+        subtree:       true,
+        attributes:    true,
+        characterData: true
+      });
+    }
+
+    if (!cache.payment || !pricesBlock) {
+      /*
+        OPTIMIZATION: Debounced fallback check.
+        The original fallback ran synchronously on every
+        childList/subtree mutation on document.body — one of
+        the most expensive possible observer targets.
+        Debouncing it means the readiness check runs at most
+        once per 80 ms burst of body mutations instead of
+        potentially hundreds of times during app injection.
+      */
+      var debouncedFallbackCheck = debounce(function () {
+        var p = document.querySelector(CONFIG.paymentContainer);
+        var b = document.querySelector(CONFIG.pricesBlock);
+        if (p && b) {
+          observers.fallback.disconnect();
+          observers.fallback = null;
+          /*
+            Refresh payment cache entry now that the element
+            exists, then re-run watcher setup.
+          */
+          cache.payment = p;
+          watchForVariantChanges();
+        }
+      }, CONFIG.debounceMs);
+
+      observers.fallback = new MutationObserver(debouncedFallbackCheck);
+      observers.fallback.observe(document.body, { childList: true, subtree: true });
+    }
+  }
+
+  function init() {
+    /*
+      APP GUARD: Abort entirely if the Essential Preorder app embed
+      is not present in the DOM. This prevents the widget from running
+      orphaned observers and DOM queries on stores where the app has
+      been uninstalled or its embed block is disabled in the theme editor.
+    */
+    var isEnabled = document.querySelector('essential-preorder-app-embed');
+    if (!isEnabled) return;
+
+    buildCache();
+    evaluateVariant();
+    watchForVariantChanges();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+})();
+
+} /* end __pwInitialised guard */
+</script>
+
